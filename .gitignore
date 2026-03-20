@@ -38,3 +38,5 @@ build/
 
 ### Environment ###
 .env
+.claude
+CLAUDE.md
