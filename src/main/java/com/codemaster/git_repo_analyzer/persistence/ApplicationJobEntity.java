@@ -1,4 +1,4 @@
-package com.codemaster.git_repo_analyzer.persistence.entity;
+package com.codemaster.git_repo_analyzer.persistence;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

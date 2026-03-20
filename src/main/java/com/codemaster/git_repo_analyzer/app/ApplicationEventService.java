@@ -1,7 +1,7 @@
 package com.codemaster.git_repo_analyzer.app;
 
 import com.codemaster.git_repo_analyzer.event.DebtDataDto;
-import com.codemaster.git_repo_analyzer.persistence.repository.ApplicationJobRepository;
+import com.codemaster.git_repo_analyzer.persistence.ApplicationJobRepository;
 import org.springframework.stereotype.Service;
 
 @Service

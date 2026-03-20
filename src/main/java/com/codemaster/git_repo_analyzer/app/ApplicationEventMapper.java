@@ -1,7 +1,7 @@
 package com.codemaster.git_repo_analyzer.app;
 
 import com.codemaster.git_repo_analyzer.event.ApplicationEventModule;
-import com.codemaster.git_repo_analyzer.persistence.entity.ApplicationEventEntity;
+import com.codemaster.git_repo_analyzer.persistence.ApplicationEventEntity;
 
 import java.util.Set;
 import java.util.stream.Collectors;
