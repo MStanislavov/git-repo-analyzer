@@ -7,7 +7,7 @@
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
 		<version>4.0.4</version>
-		<relativePath/> <!-- lookup parent from repository -->
+		<relativePath/> <!-- lookup parent from a repository -->
 	</parent>
 
 	<groupId>com.codemaster</groupId>
@@ -44,8 +44,8 @@
 		</dependency>
 
 		<dependency>
-			<groupId>com.h2database</groupId>
-			<artifactId>h2</artifactId>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
 			<scope>runtime</scope>
 		</dependency>
 
@@ -53,6 +53,17 @@
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
 			<optional>true</optional>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>2.8.8</version>
 		</dependency>
 
 	</dependencies>
@@ -71,6 +82,68 @@
 
 	<build>
 	<plugins>
+		<plugin>
+			<groupId>com.github.eirslett</groupId>
+			<artifactId>frontend-maven-plugin</artifactId>
+			<version>1.15.1</version>
+			<configuration>
+				<workingDirectory>frontend</workingDirectory>
+			</configuration>
+			<executions>
+				<execution>
+					<id>install-node-and-npm</id>
+					<goals><goal>install-node-and-npm</goal></goals>
+					<configuration>
+						<nodeVersion>v22.16.0</nodeVersion>
+					</configuration>
+				</execution>
+				<execution>
+					<id>npm-install</id>
+					<goals><goal>npm</goal></goals>
+					<configuration>
+						<arguments>install</arguments>
+					</configuration>
+				</execution>
+				<execution>
+					<id>npm-build</id>
+					<goals><goal>npm</goal></goals>
+					<configuration>
+						<arguments>run build</arguments>
+					</configuration>
+				</execution>
+			</executions>
+		</plugin>
+		<plugin>
+			<groupId>org.apache.maven.plugins</groupId>
+			<artifactId>maven-resources-plugin</artifactId>
+			<executions>
+				<execution>
+					<id>copy-frontend</id>
+					<phase>generate-resources</phase>
+					<goals><goal>copy-resources</goal></goals>
+					<configuration>
+						<outputDirectory>${project.build.directory}/classes/static</outputDirectory>
+						<resources>
+							<resource>
+								<directory>frontend/dist</directory>
+							</resource>
+						</resources>
+					</configuration>
+				</execution>
+			</executions>
+		</plugin>
+		<plugin>
+			<groupId>org.apache.maven.plugins</groupId>
+			<artifactId>maven-compiler-plugin</artifactId>
+			<configuration>
+				<annotationProcessorPaths>
+					<path>
+						<groupId>org.projectlombok</groupId>
+						<artifactId>lombok</artifactId>
+					</path>
+				</annotationProcessorPaths>
+			</configuration>
+		</plugin>
 		<plugin>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-maven-plugin</artifactId>

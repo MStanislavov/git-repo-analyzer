@@ -7,6 +7,7 @@ mvnw
 .mvn
 
 data
+cloned/
 
 ### STS ###
 .apt_generated
@@ -35,6 +36,11 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Frontend ###
+frontend/node_modules/
+frontend/dist/
+frontend/node/
 
 ### Environment ###
 .env
