@@ -1,19 +1,17 @@
 package com.codemaster.git_repo_analyzer;
 
-import com.codemaster.git_repo_analyzer.persistence.entity.ApplicationJobEntity;
-import com.codemaster.git_repo_analyzer.persistence.repository.ApplicationJobRepository;
+import com.codemaster.git_repo_analyzer.persistence.ApplicationJobEntity;
+import com.codemaster.git_repo_analyzer.persistence.ApplicationJobRepository;
 import com.codemaster.git_repo_analyzer.scraper.GitRepoClonerService;
-import jakarta.annotation.PostConstruct;
-import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.scheduling.annotation.Scheduled;
+import com.codemaster.git_repo_analyzer.scraper.RepositoryInfo;
 import org.springframework.stereotype.Component;
 
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.Set;
 
 @Component
-@EnableScheduling
 public class CloningEventScheduler {
 
   private final GitRepoClonerService gitRepoClonerService;
@@ -25,19 +23,15 @@ public class CloningEventScheduler {
     this.jobRepository = jobRepository;
   }
 
-  //@Scheduled(cron = "0 0 1 * * ?") // Cron expression for 1 AM daily
-  //@Scheduled() // Cron expression for 1 AM daily
-  @PostConstruct
-  public void initializeCloningProcess() {
-    ApplicationJobEntity applicationJob = createJob();
-    gitRepoClonerService.execute(applicationJob.getId());
-  }
-
-  private ApplicationJobEntity createJob() {
+  public int createJob() {
     return jobRepository.save(new ApplicationJobEntity(
         null, "Data Analyzer",
         Timestamp.from(Instant.now()), "gathers data from the cloned repositories",
-        new HashSet<>()));
+        new HashSet<>())).getId();
+  }
+
+  public void executeAnalysis(int jobId, Set<RepositoryInfo> repositories, String cloneDirectory) {
+    gitRepoClonerService.execute(jobId, repositories, cloneDirectory);
   }
 
 }

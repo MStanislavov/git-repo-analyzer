@@ -6,9 +6,9 @@ import com.codemaster.git_repo_analyzer.event.RepositoryClonedEvent;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -19,42 +19,42 @@ import java.nio.file.Paths;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Semaphore;
 
 @Service
 public final class GitRepoClonerService {
 
-  private final ThreadPoolTaskExecutor cloneTaskExecutor;
+  private final Semaphore cloneSemaphore;
 
   private final ApplicationEventPublisher eventPublisher;
 
   private final String cloneTargetDirectory;
 
-  private static final String REPO_DATA_PATH="repo-data/repositories.xml";
-
   private static final Logger logger = LoggerFactory.getLogger(GitRepoClonerService.class);
 
 
   public GitRepoClonerService(
-      ThreadPoolTaskExecutor cloneTaskExecutor,
+      @Qualifier("cloneSemaphore") Semaphore cloneSemaphore,
       ApplicationEventPublisher eventPublisher,
       @Value("${clone-target-directory}") String cloneTargetDirectory) {
-    this.cloneTaskExecutor = cloneTaskExecutor;
+    this.cloneSemaphore = cloneSemaphore;
     this.eventPublisher = eventPublisher;
     this.cloneTargetDirectory = cloneTargetDirectory;
   }
 
-  public void execute(int jobId) {
-    XmlConfigParser.getRepositoriesInfo(REPO_DATA_PATH)
-        .stream()
-        .map(repoInfo -> createCloneRepositoryTask(jobId, repoInfo))
-        .forEach(cloneTaskExecutor::submit);
+  public void execute(int jobId, Set<RepositoryInfo> repositories, String cloneDirectory) {
+    repositories.forEach(repoInfo ->
+        Thread.startVirtualThread(() -> cloneRepository(jobId, repoInfo, cloneDirectory)));
   }
 
-  private Runnable createCloneRepositoryTask(int jobId, RepositoryInfo repoInfo) {
-    return () -> {
-      Path repoDirPath = Paths.get(cloneTargetDirectory, repoInfo.repoName());
-      publishRepositoryClonedEvent(repoDirPath.toString(), EventStatus.IN_PROGRESS, jobId);
+  private void cloneRepository(int jobId, RepositoryInfo repoInfo, String cloneDirectory) {
+    Path repoDirPath = Paths.get(cloneDirectory, repoInfo.repoName());
+    publishRepositoryClonedEvent(repoDirPath.toString(), EventStatus.IN_PROGRESS, jobId);
+    try {
+      logger.info("Acquiring clone permit (available: {})", cloneSemaphore.availablePermits());
+      cloneSemaphore.acquire();
       try {
         if (Files.exists(repoDirPath)) {
           logger.info("Folder already exists: {}. Beginning drop operation", repoDirPath);
@@ -65,11 +65,18 @@ public final class GitRepoClonerService {
         Process process = createProcess(command);
         int exitCode = process.waitFor();
         validateProcessState(repoDirPath.toString(), exitCode, jobId);
-      } catch (Exception e) {
-        logger.error("Something went wrong while cloning, cause: {}", e.getMessage());
-        publishRepositoryClonedEvent(repoDirPath.toString(), EventStatus.FAILED, jobId);
+      } finally {
+        cloneSemaphore.release();
+        logger.info("Released clone permit (available: {})", cloneSemaphore.availablePermits());
       }
-    };
+    } catch (InterruptedException e) {
+      logger.error("Clone interrupted for: {}", repoDirPath, e);
+      Thread.currentThread().interrupt();
+      publishRepositoryClonedEvent(repoDirPath.toString(), EventStatus.FAILED, jobId);
+    } catch (Exception e) {
+      logger.error("Something went wrong while cloning: {}", repoDirPath, e);
+      publishRepositoryClonedEvent(repoDirPath.toString(), EventStatus.FAILED, jobId);
+    }
   }
 
   private void validateProcessState(String path, int exitCode, int jobId) {

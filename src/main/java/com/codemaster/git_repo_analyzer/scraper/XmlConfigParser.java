@@ -12,10 +12,11 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashSet;
 import java.util.Set;
 
-final class XmlConfigParser {
+public final class XmlConfigParser {
 
   private static final Logger logger = LoggerFactory.getLogger(XmlConfigParser.class);
 
@@ -23,7 +24,7 @@ final class XmlConfigParser {
     throw new IllegalStateException("Unable to create instance of a utility class");
   }
 
-  static Set<RepositoryInfo> getRepositoriesInfo(String repoConfigFilePath) {
+  public static Set<RepositoryInfo> getRepositoriesInfo(String repoConfigFilePath) {
     Set<RepositoryInfo> repoInfos = new HashSet<>();
     try {
       File xmlFile = new File(repoConfigFilePath);
@@ -31,7 +32,20 @@ final class XmlConfigParser {
       Document document = createDocument(dBuilder, xmlFile);
       repoInfos = extractRepositoriesInfo(document);
     } catch (Exception e) {
-      logger.error(e.getMessage());
+      logger.error("Failed to parse XML from file: {}", repoConfigFilePath, e);
+    }
+    return repoInfos;
+  }
+
+  public static Set<RepositoryInfo> getRepositoriesInfo(InputStream inputStream) {
+    Set<RepositoryInfo> repoInfos = new HashSet<>();
+    try {
+      DocumentBuilder dBuilder = createDocumentBuilder();
+      Document document = dBuilder.parse(inputStream);
+      document.getDocumentElement().normalize();
+      repoInfos = extractRepositoriesInfo(document);
+    } catch (Exception e) {
+      logger.error("Failed to parse XML from input stream", e);
     }
     return repoInfos;
   }
