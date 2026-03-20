@@ -33,8 +33,25 @@ services:
       timeout: 5s
       retries: 5
 
+  app-db:
+    image: postgres:16-alpine
+    ports:
+      - "${APP_DB_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${APP_DB_USER:-analyzer}
+      POSTGRES_PASSWORD: ${APP_DB_PASSWORD:-analyzer}
+      POSTGRES_DB: ${APP_DB_NAME:-git_repo_analyzer}
+    volumes:
+      - app_postgresql_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${APP_DB_USER:-analyzer}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   sonarqube_data:
   sonarqube_extensions:
   sonarqube_logs:
   postgresql_data:
+  app_postgresql_data:
