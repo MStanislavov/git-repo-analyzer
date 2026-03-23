@@ -29,6 +29,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.prefs.Preferences;
 
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.web.client.RestTemplate;
+
 @RestController
 @RequestMapping("/api/v1")
 final class SonarDataAnalyzerController {
@@ -41,6 +47,8 @@ final class SonarDataAnalyzerController {
   private final ApplicationEventRepository eventRepository;
   private final ApplicationJobRepository jobRepository;
   private final SseProgressService sseProgressService;
+  private final RestTemplate restTemplate;
+  private final String sonarqubeUrl;
   private final Preferences prefs;
   private final String defaultCloneDirectory;
 
@@ -50,12 +58,16 @@ final class SonarDataAnalyzerController {
       ApplicationEventRepository eventRepository,
       ApplicationJobRepository jobRepository,
       SseProgressService sseProgressService,
+      RestTemplate restTemplate,
+      @org.springframework.beans.factory.annotation.Value("${sonarqube-url}") String sonarqubeUrl,
       @org.springframework.beans.factory.annotation.Value("${clone-target-directory}") String defaultCloneDirectory) {
     this.cloningEventScheduler = cloningEventScheduler;
     this.analysisRepository = analysisRepository;
     this.eventRepository = eventRepository;
     this.jobRepository = jobRepository;
     this.sseProgressService = sseProgressService;
+    this.restTemplate = restTemplate;
+    this.sonarqubeUrl = sonarqubeUrl;
     this.defaultCloneDirectory = defaultCloneDirectory;
     this.prefs = Preferences.userNodeForPackage(SonarDataAnalyzerController.class);
   }
@@ -117,6 +129,27 @@ final class SonarDataAnalyzerController {
       logger.error("Failed to open folder picker", e);
       return ResponseEntity.internalServerError()
           .body(Map.of("error", "Failed to open folder picker: " + e.getMessage()));
+    }
+  }
+
+  @GetMapping("/sonar/issues")
+  public ResponseEntity<Map<String, Object>> getSonarIssues(
+      @RequestParam String projectKey,
+      @RequestParam(defaultValue = "BUG") String type,
+      @RequestParam(defaultValue = "1") int page,
+      @RequestParam(defaultValue = "20") int pageSize) {
+    try {
+      String apiUrl = String.format(
+          "%s/api/issues/search?componentKeys=%s&types=%s&p=%d&ps=%d&statuses=OPEN,CONFIRMED,REOPENED",
+          sonarqubeUrl, projectKey, type, page, pageSize);
+      var response = restTemplate.exchange(
+          apiUrl, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()),
+          new ParameterizedTypeReference<Map<String, Object>>() {});
+      return ResponseEntity.ok(response.getBody());
+    } catch (Exception e) {
+      logger.error("Failed to fetch SonarQube issues for project {}: {}", projectKey, e.getMessage());
+      return ResponseEntity.internalServerError()
+          .body(Map.of("error", "Failed to fetch issues: " + e.getMessage()));
     }
   }
 

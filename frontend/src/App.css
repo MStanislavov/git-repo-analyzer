@@ -707,8 +707,15 @@ textarea.input {
 
 .detail-url {
   font-size: 0.78rem;
-  color: var(--text-muted);
+  color: var(--accent);
   word-break: break-all;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.detail-url:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
 }
 
 .detail-badges {
@@ -760,11 +767,39 @@ textarea.input {
   border-radius: 10px;
   padding: 0.85rem 0.65rem;
   text-align: center;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.metric-card-expandable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.metric-card-expandable:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.metric-card-expandable.expanded {
+  grid-column: 1 / -1;
+  text-align: left;
+  padding: 1rem 1.25rem;
+  border-color: var(--accent);
 }
 
 .metric-card:hover {
   border-color: var(--border);
+}
+
+.metric-summary {
+  text-align: center;
+}
+
+.metric-card-expandable.expanded .metric-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: left;
 }
 
 .metric-val {
@@ -780,6 +815,109 @@ textarea.input {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-top: 0.2rem;
+}
+
+.metric-chevron {
+  display: inline-block;
+  margin-left: 0.35rem;
+  font-size: 0.75rem;
+  transition: transform 0.2s ease;
+  color: var(--text-muted);
+}
+
+.metric-chevron.open {
+  transform: rotate(90deg);
+}
+
+.metric-detail {
+  animation: descFadeIn 0.2s ease;
+  cursor: default;
+}
+
+.metric-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-top: 0.65rem;
+  margin-bottom: 0.5rem;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+
+/* ── Issue list ── */
+
+.issues-loading,
+.issues-empty {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: 0.5rem 0;
+  font-style: italic;
+}
+
+.issues-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.issue-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.issue-severity {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+}
+
+.severity-high {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.severity-medium {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.severity-low {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.issue-message {
+  flex: 1;
+  color: var(--text);
+}
+
+.issue-file {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes descFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ── Rating badges ── */

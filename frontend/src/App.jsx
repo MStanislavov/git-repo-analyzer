@@ -27,14 +27,15 @@ function debtDisplay(minutes) {
 function getStepState(currentStep, analysisStatus, stepName) {
   const currentIdx = STEPS.indexOf(currentStep)
   const thisIdx = STEPS.indexOf(stepName)
-  if (analysisStatus === 'SUCCEEDED') return 'done'
   if (analysisStatus === 'FAILED') {
     if (thisIdx < currentIdx) return 'done'
     if (thisIdx === currentIdx) return 'failed'
     return ''
   }
   if (thisIdx < currentIdx) return 'done'
-  if (thisIdx === currentIdx) return 'active'
+  if (thisIdx === currentIdx) {
+    return analysisStatus === 'SUCCEEDED' ? 'done' : 'active'
+  }
   return ''
 }
 
@@ -377,6 +378,106 @@ function RepoTable({ results, selectedId, onSelect }) {
   )
 }
 
+/* ── Metric Definitions ── */
+
+const METRIC_INFO = {
+  ncloc: { label: 'Lines of Code', issueType: null,
+    description: 'Physical lines containing at least one non-whitespace, non-comment character.' },
+  bugs: { label: 'Bugs', issueType: 'BUG',
+    description: 'Issues that will likely cause incorrect behavior at runtime.' },
+  vulnerabilities: { label: 'Vulnerabilities', issueType: 'VULNERABILITY',
+    description: 'Security flaws that could be exploited by attackers.' },
+  codeSmells: { label: 'Code Smells', issueType: 'CODE_SMELL',
+    description: 'Maintainability issues that increase the cost of future changes.' },
+  sqaleIndex: { label: 'Tech Debt', issueType: 'CODE_SMELL',
+    description: 'Estimated time to fix all code smells.' },
+  coverage: { label: 'Coverage', issueType: null,
+    description: 'Percentage of code lines executed by unit tests.' },
+  duplicatedLinesDensity: { label: 'Duplication', issueType: null,
+    description: 'Percentage of duplicated lines across the codebase.' },
+  reliabilityRating: { label: 'Reliability', issueType: 'BUG',
+    description: 'Rating A-E based on the worst bug severity. A = no bugs, E = blocker bugs.' },
+  securityRating: { label: 'Security', issueType: 'VULNERABILITY',
+    description: 'Rating A-E based on the worst vulnerability severity.' },
+  sqaleRating: { label: 'Maintainability', issueType: 'CODE_SMELL',
+    description: 'Rating A-E based on tech debt ratio. A = <=5%, E = >50%.' },
+}
+
+function severityClass(severity) {
+  switch (severity) {
+    case 'BLOCKER': case 'CRITICAL': return 'severity-high'
+    case 'MAJOR': return 'severity-medium'
+    default: return 'severity-low'
+  }
+}
+
+function shortPath(component) {
+  if (!component) return ''
+  const parts = component.split(':')
+  return parts.length > 1 ? parts[parts.length - 1] : component
+}
+
+/* ── Expandable Metric Card ── */
+
+function MetricCard({ metricKey, value, projectKey }) {
+  const [expanded, setExpanded] = useState(false)
+  const [issues, setIssues] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const info = METRIC_INFO[metricKey]
+
+  const toggle = () => {
+    const next = !expanded
+    setExpanded(next)
+    if (next && info.issueType && projectKey && issues === null) {
+      setLoading(true)
+      fetch(`/api/v1/sonar/issues?projectKey=${encodeURIComponent(projectKey)}&type=${info.issueType}&pageSize=25`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => { if (data?.issues) setIssues(data.issues); else setIssues([]) })
+        .catch(() => setIssues([]))
+        .finally(() => setLoading(false))
+    }
+  }
+
+  return (
+    <div
+      className={`metric-card metric-card-expandable ${expanded ? 'expanded' : ''}`}
+      onClick={toggle}
+    >
+      <div className="metric-summary">
+        <div className="metric-val">{value}</div>
+        <div className="metric-lbl">
+          {info.label}
+          <span className={`metric-chevron ${expanded ? 'open' : ''}`}>&#8250;</span>
+        </div>
+      </div>
+      {expanded && (
+        <div className="metric-detail" onClick={e => e.stopPropagation()}>
+          <p className="metric-desc">{info.description}</p>
+          {info.issueType && (
+            loading ? (
+              <div className="issues-loading">Loading issues...</div>
+            ) : issues && issues.length > 0 ? (
+              <div className="issues-list">
+                {issues.map((issue, i) => (
+                  <div className="issue-row" key={issue.key || i}>
+                    <span className={`issue-severity ${severityClass(issue.severity)}`}>{issue.severity}</span>
+                    <span className="issue-message">{issue.message}</span>
+                    {issue.component && (
+                      <span className="issue-file mono">{shortPath(issue.component)}{issue.line ? `:${issue.line}` : ''}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : issues && issues.length === 0 ? (
+              <div className="issues-empty">No open issues found.</div>
+            ) : null
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── Repo Detail ── */
 
 function RepoDetail({ selected, onReanalyze, onDelete, onClearData }) {
@@ -389,7 +490,11 @@ function RepoDetail({ selected, onReanalyze, onDelete, onClearData }) {
       <div className="detail-header">
         <div>
           <h3 className="detail-name">{selected.repositoryName}</h3>
-          {selected.repositoryUrl && <span className="detail-url mono">{selected.repositoryUrl}</span>}
+          {selected.repositoryUrl && (
+            <a className="detail-url mono" href={selected.repositoryUrl} target="_blank" rel="noopener noreferrer">
+              {selected.repositoryUrl}
+            </a>
+          )}
         </div>
         <div className="detail-badges">
           {selected.alertStatus && (
@@ -410,46 +515,16 @@ function RepoDetail({ selected, onReanalyze, onDelete, onClearData }) {
 
       {selected.analysisStatus === 'SUCCEEDED' && (
         <div className="metrics-grid">
-          <div className="metric-card">
-            <div className="metric-val">{selected.ncloc?.toLocaleString() ?? '-'}</div>
-            <div className="metric-lbl">Lines of Code</div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-val">{selected.bugs ?? '-'}</div>
-            <div className="metric-lbl">Bugs</div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-val">{selected.vulnerabilities ?? '-'}</div>
-            <div className="metric-lbl">Vulnerabilities</div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-val">{selected.codeSmells ?? '-'}</div>
-            <div className="metric-lbl">Code Smells</div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-val">{debtDisplay(selected.sqaleIndex)}</div>
-            <div className="metric-lbl">Tech Debt</div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-val">{selected.coverage != null ? `${selected.coverage.toFixed(1)}%` : '-'}</div>
-            <div className="metric-lbl">Coverage</div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-val">{selected.duplicatedLinesDensity != null ? `${selected.duplicatedLinesDensity.toFixed(1)}%` : '-'}</div>
-            <div className="metric-lbl">Duplication</div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-val"><span className={ratingClass(selected.reliabilityRating)}>{ratingToLetter(selected.reliabilityRating)}</span></div>
-            <div className="metric-lbl">Reliability</div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-val"><span className={ratingClass(selected.securityRating)}>{ratingToLetter(selected.securityRating)}</span></div>
-            <div className="metric-lbl">Security</div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-val"><span className={ratingClass(selected.sqaleRating)}>{ratingToLetter(selected.sqaleRating)}</span></div>
-            <div className="metric-lbl">Maintainability</div>
-          </div>
+          <MetricCard metricKey="ncloc" value={selected.ncloc?.toLocaleString() ?? '-'} projectKey={selected.projectKey} />
+          <MetricCard metricKey="bugs" value={selected.bugs ?? '-'} projectKey={selected.projectKey} />
+          <MetricCard metricKey="vulnerabilities" value={selected.vulnerabilities ?? '-'} projectKey={selected.projectKey} />
+          <MetricCard metricKey="codeSmells" value={selected.codeSmells ?? '-'} projectKey={selected.projectKey} />
+          <MetricCard metricKey="sqaleIndex" value={debtDisplay(selected.sqaleIndex)} projectKey={selected.projectKey} />
+          <MetricCard metricKey="coverage" value={selected.coverage != null ? `${selected.coverage.toFixed(1)}%` : '-'} projectKey={selected.projectKey} />
+          <MetricCard metricKey="duplicatedLinesDensity" value={selected.duplicatedLinesDensity != null ? `${selected.duplicatedLinesDensity.toFixed(1)}%` : '-'} projectKey={selected.projectKey} />
+          <MetricCard metricKey="reliabilityRating" value={<span className={ratingClass(selected.reliabilityRating)}>{ratingToLetter(selected.reliabilityRating)}</span>} projectKey={selected.projectKey} />
+          <MetricCard metricKey="securityRating" value={<span className={ratingClass(selected.securityRating)}>{ratingToLetter(selected.securityRating)}</span>} projectKey={selected.projectKey} />
+          <MetricCard metricKey="sqaleRating" value={<span className={ratingClass(selected.sqaleRating)}>{ratingToLetter(selected.sqaleRating)}</span>} projectKey={selected.projectKey} />
         </div>
       )}
 
