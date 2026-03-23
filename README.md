@@ -1,61 +1,72 @@
-# Git Repo Analyzer
+<p align="center">
+  <img src="etc/images/logo.svg" alt="Git Repo Analyzer" width="420"/>
+</p>
 
-A Spring Boot application that clones Git repositories, runs SonarQube static analysis, and collects code quality metrics — all orchestrated through an event-driven pipeline with a real-time web UI.
+<p align="center">
+  <strong>Analyze any Git repository for code quality, security vulnerabilities, and technical debt in one click.</strong>
+</p>
 
-## What It Does
+<p align="center">
+  <img src="https://img.shields.io/badge/Java-25-orange?style=flat-square" alt="Java 25"/>
+  <img src="https://img.shields.io/badge/Spring%20Boot-4.0-6DB33F?style=flat-square" alt="Spring Boot"/>
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square" alt="React 19"/>
+  <img src="https://img.shields.io/badge/SonarQube-10-4E9BCD?style=flat-square" alt="SonarQube"/>
+  <img src="https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square" alt="PostgreSQL"/>
+</p>
 
-1. You submit one or more Git repository URLs (individually or via XML)
-2. The app clones each repo locally
-3. Runs the SonarQube Docker scanner against each repo
-4. Collects metrics from SonarQube's API (bugs, vulnerabilities, tech debt, coverage, etc.)
-5. Displays results in a dashboard with quality ratings
+---
 
-Each step happens asynchronously with concurrency controls, and progress is streamed to the browser in real time via Server-Sent Events.
+## Overview
 
-## Tech Stack
+Git Repo Analyzer is a self-hosted dashboard that runs SonarQube static analysis against any Git repository and presents the results in a clean, interactive UI. Submit a repo URL, watch the pipeline progress in real time, and drill into every metric, from bugs and vulnerabilities down to individual issue locations in your code.
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | Java 25, Spring Boot 4.0.4, Spring Modulith 2.0.4 |
-| Frontend | React 19, Vite 8 |
-| Database | PostgreSQL 16 |
-| Analysis | SonarQube 10 Community (Docker scanner) |
-| Docs | SpringDoc OpenAPI (Swagger UI) |
+<p align="center">
+  <img src="etc/images/dashboard-analysis.png" alt="Dashboard showing analyzed repositories with expandable metrics" width="900"/>
+</p>
 
-## Prerequisites
+![img.png](img.png)
+## Features
 
-- **Java 25**
-- **Maven 3.9.7+**
-- **Git CLI**
-- **Docker** (SonarQube scanner runs in a container)
-- **Docker Compose** (for local SonarQube + PostgreSQL)
+- **One-click analysis** – paste a Git URL and hit Analyze. Bulk analysis via XML is also supported.
+- **Real-time pipeline** – watch cloning, scanning, and data collection progress streamed live to the browser.
+- **Expandable metrics** – click any metric card (Bugs, Vulnerabilities, Code Smells, etc.) to see the actual issues from SonarQube with severity, description, and file location.
+- **Quality gate** – instantly see whether a repository passes or fails SonarQube's quality gate.
+- **Full metric suite** – lines of code, tech debt, test coverage, duplication, and A-E ratings for reliability, security, and maintainability.
+- **Dark and light themes** – toggle between themes from the sidebar.
+- **Concurrent pipeline** – analyze multiple repositories in parallel with configurable concurrency limits.
 
-## Setup
+## Quick Start
 
-### 1. Clone the repository
+### Prerequisites
+
+- Java 25
+- Maven 3.9.7+
+- Docker and Docker Compose
+- Git CLI
+
+### 1. Clone and configure
 
 ```bash
 git clone https://github.com/CodeMaster10000/git-repo-analyzer.git
 cd git-repo-analyzer
+cp .env.example .env
 ```
 
-### 2. Start infrastructure
+Edit `.env` with your passwords and preferred clone directory.
+
+### 2. Start the infrastructure
 
 ```bash
-cp .env.example .env
-# Edit .env with your passwords and paths
 docker compose up -d
 ```
 
-This starts:
-- **SonarQube** on port `9000` (with its own PostgreSQL)
-- **Application PostgreSQL** on port `5433`
+This brings up SonarQube (port `9000`) and PostgreSQL (port `5433`).
 
-### 3. Configure SonarQube
+### 3. Generate a SonarQube token
 
-1. Open `http://localhost:9000` and log in (default: `admin`/`admin`)
-2. Generate a user token under **My Account > Security > Tokens**
-3. Add it to your `.env` file as `SONAR_TOKEN`
+1. Open `http://localhost:9000` (default login: `admin` / `admin`)
+2. Go to **My Account > Security > Tokens** and generate a token
+3. Add it to `.env` as `SONAR_TOKEN`
 
 ### 4. Build and run
 
@@ -64,97 +75,63 @@ mvn clean install
 java -jar target/git-repo-analyzer-0.0.1-SNAPSHOT.jar
 ```
 
-The app serves the frontend and API on **http://localhost:8080**.
-
-API docs are available at **http://localhost:8080/swagger-ui.html**.
+Open **http://localhost:8080** in your browser.
 
 ## Configuration
-
-All configuration lives in `src/main/resources/application.properties` and can be overridden via environment variables in `.env`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SONARQUBE_URL` | — | SonarQube server URL |
 | `SONAR_TOKEN` | — | SonarQube authentication token |
-| `CLONE_TARGET_DIR` | `D:/clone-dirs` | Where repos are cloned (also configurable in the UI) |
+| `CLONE_TARGET_DIR` | `D:/clone-dirs` | Local directory for cloned repositories |
 | `APP_DB_HOST` | `localhost` | PostgreSQL host |
 | `APP_DB_PORT` | `5432` | PostgreSQL port |
-| `APP_DB_USER` | `analyzer` | PostgreSQL username |
-| `APP_DB_PASSWORD` | `analyzer` | PostgreSQL password |
-| `APP_DB_NAME` | `git_repo_analyzer` | PostgreSQL database name |
+| `APP_DB_USER` | `analyzer` | Database username |
+| `APP_DB_PASSWORD` | `analyzer` | Database password |
 
-Pipeline concurrency is tunable in `application.properties`:
+Pipeline concurrency can be tuned in `application.properties`:
 
 ```properties
 pipeline.clone.max-concurrent=10
 pipeline.sonar-analysis.max-concurrent=5
 ```
 
-## Usage
-
-### Analyze a single repository
-
-In the **Analyze** tab, paste a Git URL and click **Start Analysis**. The pipeline progress appears in real time:
-
-**Cloning → Analyzing → Collecting → Completed**
-
-### Analyze multiple repositories
-
-Upload an XML file or paste XML content in the bulk analysis section:
-
-```xml
-<repositories>
-  <repository url="https://github.com/user/repo-one.git"/>
-  <repository url="https://github.com/user/repo-two.git"/>
-</repositories>
-```
-
-### View results
-
-Switch to the **Dashboard** tab to see all analyzed repositories with:
-- Quality gate status
-- Tech debt (hours)
-- Detailed metrics: lines of code, bugs, vulnerabilities, code smells, coverage, duplication, and A–E ratings for reliability, security, and maintainability
-
-## Architecture
-
-The application is an **event-driven modulith** built with Spring Modulith. Each stage of the pipeline is a separate module communicating through Spring application events:
+## How It Works
 
 ```
-POST /api/v1/analyze/url
-  └─ CloningEventScheduler
-       └─ GitRepoClonerService (virtual threads, semaphore-limited)
-            └─ RepositoryClonedEvent
-                 └─ RepositoryClonedListener (Docker sonar-scanner, semaphore-limited)
-                      └─ RepositoryAnalyzedEvent
-                           └─ SonarDataAnalyzedListener (SonarQube REST API)
-                                └─ DataAnalyzedEvent
-                                     └─ ApplicationEventListener (persist + SSE broadcast)
+Submit repo URL
+  └─ Clone repository (Git CLI, virtual threads)
+       └─ Run SonarQube scanner (Docker container)
+            └─ Collect metrics (SonarQube REST API)
+                 └─ Display results (SSE → React dashboard)
 ```
 
-### Modules
+The application is built as an **event-driven modulith** using Spring Modulith. Each pipeline stage runs asynchronously and communicates through application events, with progress streamed to the frontend via Server-Sent Events.
 
-| Module | Purpose |
-|--------|---------|
-| `scraper` | Clones repos via Git CLI using ProcessBuilder |
-| `sonar_analyzer` | Runs SonarQube Docker scanner on cloned repos |
-| `sonar_data_collector` | Queries SonarQube REST API for quality metrics |
-| `persistence` | JPA entities and repositories (PostgreSQL) |
-| `event` | Event definitions and enums |
-| `app` | REST controller, SSE service, event listener |
-| `config` | Concurrency configuration (semaphores, async) |
-
-## REST API
+## API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/v1/analyze/url` | Analyze a single repo URL |
-| `POST` | `/api/v1/analyze/xml` | Analyze repos from XML (file upload or text) |
-| `GET` | `/api/v1/analyze/stream` | SSE stream for real-time pipeline progress |
-| `GET` | `/api/v1/results` | Get all analysis results |
+| `POST` | `/api/v1/analyze/url` | Analyze a single repository |
+| `POST` | `/api/v1/analyze/xml` | Bulk analyze from XML |
+| `GET` | `/api/v1/analyze/stream` | SSE stream for pipeline progress |
+| `GET` | `/api/v1/results` | List all analysis results |
 | `GET` | `/api/v1/results/{repoName}` | Get results for a specific repo |
-| `DELETE` | `/api/v1/results/{id}` | Delete a repo and its cloned files |
-| `DELETE` | `/api/v1/results/{id}/data` | Clear analysis data (keep the repo record) |
-| `GET` | `/api/v1/config/clone-directory` | Get the clone directory |
-| `PUT` | `/api/v1/config/clone-directory` | Set the clone directory |
-| `POST` | `/api/v1/config/select-directory` | Open native folder picker |
+| `GET` | `/api/v1/sonar/issues` | Fetch detailed issues from SonarQube |
+| `DELETE` | `/api/v1/results/{id}` | Remove a repository |
+
+Full API documentation is available at `/swagger-ui.html` when the application is running.
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | Java 25, Spring Boot 4.0, Spring Modulith 2.0 |
+| Frontend | React 19, Vite 8 |
+| Database | PostgreSQL 16 |
+| Analysis Engine | SonarQube 10 Community Edition |
+| Infrastructure | Docker Compose |
+
+## License
+
+This project is for personal and educational use.
