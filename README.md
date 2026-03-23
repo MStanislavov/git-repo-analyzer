@@ -24,7 +24,7 @@ Git Repo Analyzer is a self-hosted dashboard that runs SonarQube static analysis
   <img src="etc/images/dashboard-analysis.png" alt="Dashboard showing analyzed repositories with expandable metrics" width="900"/>
 </p>
 
-![img.png](img.png)
+![analysis-main.png](etc/images/analysis-main.png)
 ## Features
 
 - **One-click analysis** – paste a Git URL and hit Analyze. Bulk analysis via XML is also supported.
