@@ -253,7 +253,8 @@ class SonarDataAnalyzedListener {
         status,
         Timestamp.from(Instant.now()),
         UUID.randomUUID(),
-        event.getJobId()
+        event.getJobId(),
+        event.getProjectKey()
     );
     eventPublisher.publishEvent(dataAnalyzedEvent);
   }

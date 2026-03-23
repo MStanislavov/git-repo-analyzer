@@ -24,6 +24,8 @@ public abstract class ApplicationEventModule extends ApplicationEvent {
 
   private final int jobId;
 
+  private final String repositoryName;
+
   protected ApplicationEventModule(
       Object source,
       EventType eventType,
@@ -31,7 +33,8 @@ public abstract class ApplicationEventModule extends ApplicationEvent {
       EventStatus eventStatus,
       Timestamp eventTimestamp,
       UUID uuid,
-      int jobId) {
+      int jobId,
+      String repositoryName) {
     super(source);
     this.eventType = eventType;
     this.message = message;
@@ -39,6 +42,7 @@ public abstract class ApplicationEventModule extends ApplicationEvent {
     this.eventTimestamp = eventTimestamp;
     this.uuid = uuid;
     this.jobId = jobId;
+    this.repositoryName = repositoryName;
   }
 
 

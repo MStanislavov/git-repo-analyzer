@@ -9,8 +9,8 @@ import java.util.UUID;
 public final class DataAnalyzedEvent extends ApplicationEventModule {
 
   public DataAnalyzedEvent(Object source, EventType eventType, String message, EventStatus eventStatus, Timestamp eventTimestamp,
-      UUID uuid, int jobId) {
-    super(source, eventType, message, eventStatus, eventTimestamp, uuid, jobId);
+      UUID uuid, int jobId, String repositoryName) {
+    super(source, eventType, message, eventStatus, eventTimestamp, uuid, jobId, repositoryName);
   }
 
 }

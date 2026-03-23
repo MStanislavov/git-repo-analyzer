@@ -63,6 +63,8 @@ class RepositoryClonedListener {
       updateAnalysisStatus(repositoryPath, STATUS_IN_PROGRESS, STEP_ANALYZING, null);
 
       String projectKey = extractRepoName(repositoryPath);
+      publishRepositoryAnalyzedEvent(clonedEvent, projectKey, EventStatus.IN_PROGRESS);
+
       ShellProcessData scannerData = dockerScannerCommandBuilder.buildCommand(repositoryPath, projectKey);
 
       logger.info("Acquiring sonar analysis permit (available: {})", sonarAnalysisSemaphore.availablePermits());
@@ -157,10 +159,15 @@ class RepositoryClonedListener {
   }
 
   private void publishRepositoryAnalyzedEvent(RepositoryClonedEvent event, String projectKey, EventStatus status) {
+    String message = switch (status) {
+      case FAILED -> "could not analyze repository";
+      case IN_PROGRESS -> "analyzing repository";
+      case SUCCEEDED -> "successfully analyzed";
+    };
     RepositoryAnalyzedEvent repositoryAnalyzedEvent = new RepositoryAnalyzedEvent(
         this,
         EventType.ANALYZED,
-        status.equals(EventStatus.FAILED) ? "could not analyze repository" : "successfully analyzed",
+        message,
         status,
         Timestamp.from(Instant.now()),
         UUID.randomUUID(),

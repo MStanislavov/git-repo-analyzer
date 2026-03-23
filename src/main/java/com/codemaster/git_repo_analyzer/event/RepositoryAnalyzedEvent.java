@@ -13,7 +13,7 @@ public class RepositoryAnalyzedEvent extends ApplicationEventModule {
 
   public RepositoryAnalyzedEvent(Object source, EventType eventType, String message, EventStatus eventStatus, Timestamp eventTimestamp,
       UUID uuid, int jobId, String projectKey) {
-    super(source, eventType, message, eventStatus, eventTimestamp, uuid, jobId);
+    super(source, eventType, message, eventStatus, eventTimestamp, uuid, jobId, projectKey);
     this.projectKey = projectKey;
   }
 

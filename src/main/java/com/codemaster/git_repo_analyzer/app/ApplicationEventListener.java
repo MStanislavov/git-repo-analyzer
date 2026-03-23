@@ -3,15 +3,12 @@ package com.codemaster.git_repo_analyzer.app;
 import static com.codemaster.git_repo_analyzer.util.Constants.*;
 
 import com.codemaster.git_repo_analyzer.event.ApplicationEventModule;
-import com.codemaster.git_repo_analyzer.event.RepositoryClonedEvent;
 import com.codemaster.git_repo_analyzer.persistence.ApplicationEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-
-import java.nio.file.Paths;
 
 
 @Service
@@ -45,11 +42,7 @@ public class ApplicationEventListener {
   }
 
   private String extractRepoName(ApplicationEventModule event) {
-    if (event instanceof RepositoryClonedEvent clonedEvent) {
-      String path = clonedEvent.getLocalRepositoryPath();
-      return Paths.get(path).getFileName().toString();
-    }
-    return event.getEventType().name();
+    return event.getRepositoryName();
   }
 
   private String mapEventToStep(ApplicationEventModule event) {

@@ -31,7 +31,8 @@ final class ApplicationEventMapper {
         entity.getEventStatus(),
         entity.getEventTimestamp(),
         entity.getId(),
-        entity.getJobId()
+        entity.getJobId(),
+        ""
     ) {};
   }
 
