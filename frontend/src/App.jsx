@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 
-const STEPS = ['CLONING', 'BUILDING', 'ANALYZING', 'COLLECTING']
+const STEPS = ['CLONING', 'ANALYZING', 'COLLECTING']
 
 /* ── Utilities ── */
 
@@ -281,7 +281,7 @@ function InputSection({ onAnalyzing, cloneDirectory, setCloneDirectory, persistC
           </button>
         </div>
       )}
-      <p className="hint">Currently supports Java (Maven) repositories only</p>
+      <p className="hint">Analyzes repositories using SonarQube static analysis</p>
     </div>
   )
 }
