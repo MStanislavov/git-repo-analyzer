@@ -13,7 +13,6 @@ public final class Constants {
 
   // Pipeline steps
   public static final String STEP_CLONING = "CLONING";
-  public static final String STEP_BUILDING = "BUILDING";
   public static final String STEP_ANALYZING = "ANALYZING";
   public static final String STEP_COLLECTING = "COLLECTING";
   public static final String STEP_COMPLETED = "COMPLETED";

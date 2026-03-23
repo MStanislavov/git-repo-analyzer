@@ -15,9 +15,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -34,16 +32,16 @@ class RepositoryClonedListener {
   private static final Logger logger = LoggerFactory.getLogger(RepositoryClonedListener.class);
 
   private final ApplicationEventPublisher eventPublisher;
-  private final MavenTemplateHandler mavenTemplateHandler;
+  private final DockerScannerCommandBuilder dockerScannerCommandBuilder;
   private final RepositoryAnalysisRepository analysisRepository;
   private final Semaphore sonarAnalysisSemaphore;
 
   RepositoryClonedListener(ApplicationEventPublisher eventPublisher,
-      MavenTemplateHandler mavenTemplateHandler,
+      DockerScannerCommandBuilder dockerScannerCommandBuilder,
       RepositoryAnalysisRepository analysisRepository,
       @Qualifier("sonarAnalysisSemaphore") Semaphore sonarAnalysisSemaphore) {
     this.eventPublisher = eventPublisher;
-    this.mavenTemplateHandler = mavenTemplateHandler;
+    this.dockerScannerCommandBuilder = dockerScannerCommandBuilder;
     this.analysisRepository = analysisRepository;
     this.sonarAnalysisSemaphore = sonarAnalysisSemaphore;
   }
@@ -62,40 +60,23 @@ class RepositoryClonedListener {
   private void executeShellProcess(RepositoryClonedEvent clonedEvent) {
     String repositoryPath = clonedEvent.getLocalRepositoryPath();
     try {
-      // Step 1: Build (runs freely — not SonarQube-bound)
-      updateAnalysisStatus(repositoryPath, STATUS_IN_PROGRESS, STEP_BUILDING, null);
-      publishRepositoryAnalyzedEvent(clonedEvent, "", EventStatus.IN_PROGRESS);
-
-      ShellProcessData buildData = mavenTemplateHandler.getBuildProcessData();
-      int buildExitCode = runMavenProcess(repositoryPath, buildData, "mvn_build_output.log", "mvn_build_error.log");
-
-      if (buildExitCode != 0) {
-        logger.error("Maven build failed with exit code: {}", buildExitCode);
-        updateAnalysisStatus(repositoryPath, STATUS_FAILED, STEP_BUILDING, "Maven build failed with exit code: " + buildExitCode);
-        publishRepositoryAnalyzedEvent(clonedEvent, "", EventStatus.FAILED);
-        return;
-      }
-      logger.info("Maven build succeeded for: {}", repositoryPath);
-
-      // Step 2: Sonar analysis (throttled to max concurrent)
       updateAnalysisStatus(repositoryPath, STATUS_IN_PROGRESS, STEP_ANALYZING, null);
+
+      String projectKey = extractRepoName(repositoryPath);
+      ShellProcessData scannerData = dockerScannerCommandBuilder.buildCommand(repositoryPath, projectKey);
 
       logger.info("Acquiring sonar analysis permit (available: {})", sonarAnalysisSemaphore.availablePermits());
       sonarAnalysisSemaphore.acquire();
       try {
-        ShellProcessData sonarData = mavenTemplateHandler.getSonarProcessData();
-        File sonarLogFile = new File(repositoryPath, "mvn_sonar_output.log");
-        int sonarExitCode = runMavenProcess(repositoryPath, sonarData, "mvn_sonar_output.log", "mvn_sonar_error.log");
+        int exitCode = runProcess(repositoryPath, scannerData, "sonar_scanner_output.log", "sonar_scanner_error.log");
+        logger.info("Docker sonar-scanner process exited with code: {}", exitCode);
 
-        logger.info("Maven sonar process exited with code: {}", sonarExitCode);
-
-        String projectKey = extractProjectKeyFromLogFile(sonarLogFile);
-        if (projectKey != null) {
+        if (exitCode == 0) {
           updateAnalysisStatus(repositoryPath, STATUS_IN_PROGRESS, STEP_COLLECTING, null);
           updateProjectKey(repositoryPath, projectKey);
           publishRepositoryAnalyzedEvent(clonedEvent, projectKey, EventStatus.SUCCEEDED);
         } else {
-          updateAnalysisStatus(repositoryPath, STATUS_FAILED, STEP_ANALYZING, "Could not extract project key from sonar output");
+          updateAnalysisStatus(repositoryPath, STATUS_FAILED, STEP_ANALYZING, "Sonar scanner failed with exit code: " + exitCode);
           publishRepositoryAnalyzedEvent(clonedEvent, "", EventStatus.FAILED);
         }
       } finally {
@@ -114,7 +95,7 @@ class RepositoryClonedListener {
     }
   }
 
-  private int runMavenProcess(String repositoryPath, ShellProcessData shellProcessData,
+  private int runProcess(String repositoryPath, ShellProcessData shellProcessData,
       String outputLogName, String errorLogName) throws IOException, InterruptedException {
     List<String> commands = createProcessCommands(shellProcessData);
     ProcessBuilder processBuilder = new ProcessBuilder(commands);
@@ -138,23 +119,8 @@ class RepositoryClonedListener {
       commands.add("/bin/sh");
       commands.add("-c");
     }
-    commands.add(shellProcessData.mvnCommand());
+    commands.add(shellProcessData.command());
     return commands;
-  }
-
-  private String extractProjectKeyFromLogFile(File logFile) {
-    try (BufferedReader reader = new BufferedReader(new FileReader(logFile))) {
-      String line;
-      while ((line = reader.readLine()) != null) {
-        logger.info(line);
-        if (line.contains("Project key: ")) {
-          return line.split(": ")[1].trim();
-        }
-      }
-    } catch (IOException e) {
-      logger.error("Error reading log file: {}", logFile.getAbsolutePath(), e);
-    }
-    return null;
   }
 
   private void updateAnalysisStatus(String repositoryPath, String status, String step, String errorMessage) {

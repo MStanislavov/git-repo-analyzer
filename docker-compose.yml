@@ -4,7 +4,7 @@ services:
     ports:
       - "${SONAR_PORT:-9000}:9000"
     environment:
-      SONAR_JDBC_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-sonarqube}
+      SONAR_JDBC_URL: jdbc:postgresql://sonar-db:5432/${POSTGRES_DB:-sonarqube}
       SONAR_JDBC_USERNAME: ${POSTGRES_USER:-sonarqube}
       SONAR_JDBC_PASSWORD: ${POSTGRES_PASSWORD:-sonarqube}
     volumes:
@@ -16,10 +16,10 @@ services:
         soft: 65536
         hard: 65536
     depends_on:
-      db:
+      sonar-db:
         condition: service_healthy
 
-  db:
+  sonar-db:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-sonarqube}
