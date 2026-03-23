@@ -76,9 +76,10 @@ class SonarDataAnalyzedListener {
   private void processSonarProjectData(RepositoryAnalyzedEvent analyzedEvent) {
     publishDataAnalyzedEvent(analyzedEvent, EventStatus.IN_PROGRESS);
     String projectKey = analyzedEvent.getProjectKey();
-    String apiUrl = String.format("%s/api/measures/component?component=%s&metricKeys=%s",
-        sonarqubeUrl, projectKey, METRIC_KEYS);
     try {
+      waitForComputeEngine(projectKey);
+      String apiUrl = String.format("%s/api/measures/component?component=%s&metricKeys=%s",
+          sonarqubeUrl, projectKey, METRIC_KEYS);
       HttpHeaders headers = new HttpHeaders();
       HttpEntity<String> entity = new HttpEntity<>(headers);
       ResponseEntity<Map<String, Map<String, Object>>> response = restTemplate.exchange(
@@ -99,7 +100,46 @@ class SonarDataAnalyzedListener {
       logException(projectKey, e);
       updateAnalysisFailure(projectKey, "SonarQube API error: " + e.getMessage());
       publishDataAnalyzedEvent(analyzedEvent, EventStatus.FAILED);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      updateAnalysisFailure(projectKey, "Interrupted while waiting for CE task");
+      publishDataAnalyzedEvent(analyzedEvent, EventStatus.FAILED);
     }
+  }
+
+  @SuppressWarnings("unchecked")
+  private void waitForComputeEngine(String projectKey) throws InterruptedException {
+    String ceUrl = String.format("%s/api/ce/component?component=%s", sonarqubeUrl, projectKey);
+    int maxAttempts = 30;
+    for (int i = 0; i < maxAttempts; i++) {
+      try {
+        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+            ceUrl, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()),
+            new ParameterizedTypeReference<>() {});
+        Map<String, Object> body = response.getBody();
+        if (body != null) {
+          List<Object> queue = (List<Object>) body.get("queue");
+          Map<String, Object> current = (Map<String, Object>) body.get("current");
+          boolean queueEmpty = queue == null || queue.isEmpty();
+          boolean taskDone = current != null && "SUCCESS".equals(current.get("status"));
+          if (queueEmpty && taskDone) {
+            logger.info("CE task completed for project: {}", projectKey);
+            return;
+          }
+        }
+      } catch (HttpClientErrorException e) {
+        if (e.getStatusCode().value() == 401 || e.getStatusCode().value() == 403) {
+          logger.error("SonarQube authentication failed ({}). Check sonarqube-auth token.", e.getStatusCode());
+          throw e;
+        }
+        logger.debug("CE status check failed for {}: {}", projectKey, e.getMessage());
+      } catch (RestClientException e) {
+        logger.debug("CE status check failed for {}: {}", projectKey, e.getMessage());
+      }
+      logger.info("Waiting for CE task to complete for project: {} (attempt {}/{})", projectKey, i + 1, maxAttempts);
+      Thread.sleep(2000);
+    }
+    logger.warn("CE task did not complete within timeout for project: {}", projectKey);
   }
 
   private void extractAndPersistMetrics(Map<String, Map<String, Object>> response,
