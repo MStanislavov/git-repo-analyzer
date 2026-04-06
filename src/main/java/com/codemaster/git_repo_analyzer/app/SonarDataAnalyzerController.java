@@ -24,6 +24,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -41,6 +42,12 @@ final class SonarDataAnalyzerController {
 
   private static final Logger logger = LoggerFactory.getLogger(SonarDataAnalyzerController.class);
   private static final String PREF_KEY_CLONE_DIR = "cloneDirectory";
+  private static final String FULL_METRIC_KEYS = "ncloc,bugs,vulnerabilities,code_smells,sqale_index,"
+      + "coverage,duplicated_lines_density,reliability_rating,security_rating,sqale_rating,alert_status,"
+      + "complexity,cognitive_complexity,comment_lines_density,sqale_debt_ratio,"
+      + "blocker_violations,critical_violations,major_violations,minor_violations,info_violations,"
+      + "classes,functions,statements,branch_coverage,line_coverage,"
+      + "duplicated_blocks,duplicated_files,duplicated_lines";
 
   private final CloningEventScheduler cloningEventScheduler;
   private final RepositoryAnalysisRepository analysisRepository;
@@ -153,11 +160,92 @@ final class SonarDataAnalyzerController {
     }
   }
 
+  @GetMapping("/sonar/full")
+  public ResponseEntity<Map<String, Object>> getFullSonarData(@RequestParam String projectKey) {
+    Map<String, Object> result = new LinkedHashMap<>();
+    HttpEntity<String> entity = new HttpEntity<>(new HttpHeaders());
+
+    // Metrics
+    try {
+      String metricsUrl = String.format(
+          "%s/api/measures/component?component=%s&metricKeys=%s",
+          sonarqubeUrl, projectKey, FULL_METRIC_KEYS);
+      var metricsResponse = restTemplate.exchange(
+          metricsUrl, HttpMethod.GET, entity,
+          new ParameterizedTypeReference<Map<String, Object>>() {});
+      result.put("metrics", metricsResponse.getBody());
+    } catch (Exception e) {
+      logger.error("Failed to fetch metrics for project {}: {}", projectKey, e.getMessage());
+      result.put("metrics", Map.of("error", e.getMessage()));
+    }
+
+    // Issues
+    try {
+      String issuesUrl = String.format(
+          "%s/api/issues/search?componentKeys=%s&types=BUG,VULNERABILITY,CODE_SMELL&ps=500&statuses=OPEN,CONFIRMED,REOPENED",
+          sonarqubeUrl, projectKey);
+      var issuesResponse = restTemplate.exchange(
+          issuesUrl, HttpMethod.GET, entity,
+          new ParameterizedTypeReference<Map<String, Object>>() {});
+      result.put("issues", issuesResponse.getBody());
+    } catch (Exception e) {
+      logger.error("Failed to fetch issues for project {}: {}", projectKey, e.getMessage());
+      result.put("issues", Map.of("error", e.getMessage()));
+    }
+
+    // Security Hotspots
+    try {
+      String hotspotsUrl = String.format(
+          "%s/api/hotspots/search?projectKey=%s&ps=500",
+          sonarqubeUrl, projectKey);
+      var hotspotsResponse = restTemplate.exchange(
+          hotspotsUrl, HttpMethod.GET, entity,
+          new ParameterizedTypeReference<Map<String, Object>>() {});
+      result.put("hotspots", hotspotsResponse.getBody());
+    } catch (Exception e) {
+      logger.error("Failed to fetch hotspots for project {}: {}", projectKey, e.getMessage());
+      result.put("hotspots", Map.of("error", e.getMessage()));
+    }
+
+    // Quality Gate
+    try {
+      String gateUrl = String.format(
+          "%s/api/qualitygates/project_status?projectKey=%s",
+          sonarqubeUrl, projectKey);
+      var gateResponse = restTemplate.exchange(
+          gateUrl, HttpMethod.GET, entity,
+          new ParameterizedTypeReference<Map<String, Object>>() {});
+      result.put("qualityGate", gateResponse.getBody());
+    } catch (Exception e) {
+      logger.error("Failed to fetch quality gate for project {}: {}", projectKey, e.getMessage());
+      result.put("qualityGate", Map.of("error", e.getMessage()));
+    }
+
+    return ResponseEntity.ok(result);
+  }
+
   private String resolveCloneDirectory(String cloneDirectory) {
     if (cloneDirectory != null && !cloneDirectory.isBlank()) {
       return cloneDirectory;
     }
     return prefs.get(PREF_KEY_CLONE_DIR, defaultCloneDirectory);
+  }
+
+  @PostMapping("/analyze/local")
+  public ResponseEntity<Map<String, String>> analyzeLocal(@RequestBody Map<String, String> body) {
+    String path = body.get("path");
+    if (path == null || path.isBlank()) {
+      return ResponseEntity.badRequest().body(Map.of("error", "Path is required"));
+    }
+    path = Paths.get(path.trim()).toAbsolutePath().normalize().toString();
+    if (!Files.exists(Paths.get(path)) || !Files.isDirectory(Paths.get(path))) {
+      return ResponseEntity.badRequest().body(Map.of("error", "Path does not exist or is not a directory"));
+    }
+    RepositoryInfo repoInfo = new RepositoryInfo(path, true);
+    int jobId = cloningEventScheduler.createJob();
+    initializeAnalysisEntity(repoInfo, jobId);
+    cloningEventScheduler.executeAnalysis(jobId, Set.of(repoInfo), path);
+    return ResponseEntity.ok(Map.of("message", "Analysis started for " + repoInfo.repoName()));
   }
 
   @PostMapping("/analyze/url")
