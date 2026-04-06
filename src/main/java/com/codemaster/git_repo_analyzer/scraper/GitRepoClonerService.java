@@ -46,7 +46,33 @@ public final class GitRepoClonerService {
 
   public void execute(int jobId, Set<RepositoryInfo> repositories, String cloneDirectory) {
     repositories.forEach(repoInfo ->
-        Thread.startVirtualThread(() -> cloneRepository(jobId, repoInfo, cloneDirectory)));
+        Thread.startVirtualThread(() -> {
+          if (repoInfo.localPath()) {
+            validateAndPublishLocalRepo(jobId, repoInfo);
+          } else {
+            cloneRepository(jobId, repoInfo, cloneDirectory);
+          }
+        }));
+  }
+
+  private void validateAndPublishLocalRepo(int jobId, RepositoryInfo repoInfo) {
+    String localPath = repoInfo.repoUrl();
+    Path repoPath = Paths.get(localPath);
+    Path gitDir = repoPath.resolve(".git");
+
+    if (!Files.exists(repoPath) || !Files.isDirectory(repoPath)) {
+      logger.error("Local path does not exist or is not a directory: {}", localPath);
+      publishRepositoryClonedEvent(localPath, EventStatus.FAILED, jobId);
+      return;
+    }
+    if (!Files.exists(gitDir)) {
+      logger.error("Path is not a git repository (no .git directory): {}", localPath);
+      publishRepositoryClonedEvent(localPath, EventStatus.FAILED, jobId);
+      return;
+    }
+
+    logger.info("Local repository validated: {}", localPath);
+    publishRepositoryClonedEvent(localPath, EventStatus.SUCCEEDED, jobId);
   }
 
   private void cloneRepository(int jobId, RepositoryInfo repoInfo, String cloneDirectory) {
