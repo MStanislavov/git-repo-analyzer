@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Timestamp;
@@ -70,7 +71,9 @@ class RepositoryClonedListener {
       logger.info("Acquiring sonar analysis permit (available: {})", sonarAnalysisSemaphore.availablePermits());
       sonarAnalysisSemaphore.acquire();
       try {
-        int exitCode = runProcess(repositoryPath, scannerData, "sonar_scanner_output.log", "sonar_scanner_error.log");
+        String outputLogName = "sonar_scanner_output.log";
+        String errorLogName = "sonar_scanner_error.log";
+        int exitCode = runProcess(repositoryPath, scannerData, outputLogName, errorLogName);
         logger.info("Docker sonar-scanner process exited with code: {}", exitCode);
 
         if (exitCode == 0) {
@@ -78,7 +81,20 @@ class RepositoryClonedListener {
           updateProjectKey(repositoryPath, projectKey);
           publishRepositoryAnalyzedEvent(clonedEvent, projectKey, EventStatus.SUCCEEDED);
         } else {
-          updateAnalysisStatus(repositoryPath, STATUS_FAILED, STEP_ANALYZING, "Sonar scanner failed with exit code: " + exitCode);
+          String errorDetails = readLogTail(Paths.get(repositoryPath, errorLogName), 50);
+          String outputDetails = readLogTail(Paths.get(repositoryPath, outputLogName), 50);
+          logger.error("Sonar scanner failed (exit code {}) for: {}", exitCode, repositoryPath);
+          if (!errorDetails.isEmpty()) {
+            logger.error("Scanner stderr:\n{}", errorDetails);
+          }
+          if (!outputDetails.isEmpty()) {
+            logger.error("Scanner stdout (last lines):\n{}", outputDetails);
+          }
+          String errorMessage = "Sonar scanner failed with exit code: " + exitCode;
+          if (!errorDetails.isEmpty()) {
+            errorMessage += "\n" + errorDetails;
+          }
+          updateAnalysisStatus(repositoryPath, STATUS_FAILED, STEP_ANALYZING, errorMessage);
           publishRepositoryAnalyzedEvent(clonedEvent, "", EventStatus.FAILED);
         }
       } finally {
@@ -151,6 +167,17 @@ class RepositoryClonedListener {
           entity.setProjectKey(projectKey);
           analysisRepository.save(entity);
         });
+  }
+
+  private String readLogTail(Path logPath, int maxLines) {
+    try {
+      if (!Files.exists(logPath)) return "";
+      List<String> lines = Files.readAllLines(logPath);
+      int start = Math.max(0, lines.size() - maxLines);
+      return String.join("\n", lines.subList(start, lines.size())).trim();
+    } catch (IOException e) {
+      return "(could not read log: " + e.getMessage() + ")";
+    }
   }
 
   private String extractRepoName(String repositoryPath) {
