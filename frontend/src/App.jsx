@@ -172,6 +172,7 @@ function StatsCards({ results, activeCount }) {
 function InputSection({ onAnalyzing, cloneDirectory, setCloneDirectory, persistCloneDirectory }) {
   const [mode, setMode] = useState('url')
   const [url, setUrl] = useState('')
+  const [localPath, setLocalPath] = useState('')
   const [xml, setXml] = useState('')
   const [fileName, setFileName] = useState('')
   const [loading, setLoading] = useState(false)
@@ -200,6 +201,19 @@ function InputSection({ onAnalyzing, cloneDirectory, setCloneDirectory, persistC
         body: JSON.stringify({ url: url.trim(), cloneDirectory: cloneDirectory.trim() })
       })
       if (res.ok) { onAnalyzing(); setUrl('') }
+    } finally { setLoading(false) }
+  }
+
+  const submitLocal = async () => {
+    if (!localPath.trim()) return
+    setLoading(true)
+    try {
+      const res = await fetch('/api/v1/analyze/local', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: localPath.trim() })
+      })
+      if (res.ok) { onAnalyzing(); setLocalPath('') }
     } finally { setLoading(false) }
   }
 
@@ -248,6 +262,7 @@ function InputSection({ onAnalyzing, cloneDirectory, setCloneDirectory, persistC
 
       <div className="mode-toggle">
         <button className={mode === 'url' ? 'active' : ''} onClick={() => setMode('url')}>Single URL</button>
+        <button className={mode === 'local' ? 'active' : ''} onClick={() => setMode('local')}>Local Path</button>
         <button className={mode === 'xml' ? 'active' : ''} onClick={() => setMode('xml')}>Bulk XML</button>
       </div>
 
@@ -262,6 +277,20 @@ function InputSection({ onAnalyzing, cloneDirectory, setCloneDirectory, persistC
             onKeyDown={(e) => e.key === 'Enter' && submitUrl()}
           />
           <button className="btn btn-primary" onClick={submitUrl} disabled={loading || !url.trim()}>
+            {loading ? 'Starting...' : 'Analyze'}
+          </button>
+        </div>
+      ) : mode === 'local' ? (
+        <div className="input-row">
+          <input
+            type="text"
+            className="input mono"
+            placeholder="C:\repos\my-project or /home/user/repos/my-project"
+            value={localPath}
+            onChange={(e) => setLocalPath(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && submitLocal()}
+          />
+          <button className="btn btn-primary" onClick={submitLocal} disabled={loading || !localPath.trim()}>
             {loading ? 'Starting...' : 'Analyze'}
           </button>
         </div>
@@ -482,6 +511,49 @@ function MetricCard({ metricKey, value, projectKey }) {
 
 function RepoDetail({ selected, onReanalyze, onDelete, onClearData }) {
   const [confirmAction, setConfirmAction] = useState(null)
+  const [detailView, setDetailView] = useState('raw')
+  const [sonarJson, setSonarJson] = useState(null)
+  const [sonarJsonLoading, setSonarJsonLoading] = useState(false)
+  const [fullData, setFullData] = useState(null)
+  const [fullDataLoading, setFullDataLoading] = useState(false)
+  const lastFetchedKey = useRef(null)
+  const lastFetchedFullKey = useRef(null)
+
+  const switchToJson = async () => {
+    setDetailView('json')
+    if (!selected?.projectKey) return
+    if (lastFetchedKey.current === selected.projectKey && sonarJson !== null) return
+    setSonarJsonLoading(true)
+    setSonarJson(null)
+    try {
+      const res = await fetch(`/api/v1/sonar/issues?projectKey=${encodeURIComponent(selected.projectKey)}&type=BUG,VULNERABILITY,CODE_SMELL&pageSize=500`)
+      const data = res.ok ? await res.json() : null
+      setSonarJson(data ?? { error: 'Failed to fetch from SonarQube' })
+      lastFetchedKey.current = selected.projectKey
+    } catch {
+      setSonarJson({ error: 'Failed to fetch SonarQube issues' })
+    } finally {
+      setSonarJsonLoading(false)
+    }
+  }
+
+  const switchToFull = async () => {
+    setDetailView('full')
+    if (!selected?.projectKey) return
+    if (lastFetchedFullKey.current === selected.projectKey && fullData !== null) return
+    setFullDataLoading(true)
+    setFullData(null)
+    try {
+      const res = await fetch(`/api/v1/sonar/full?projectKey=${encodeURIComponent(selected.projectKey)}`)
+      const data = res.ok ? await res.json() : null
+      setFullData(data ?? { error: 'Failed to fetch full SonarQube data' })
+      lastFetchedFullKey.current = selected.projectKey
+    } catch {
+      setFullData({ error: 'Failed to fetch full SonarQube data' })
+    } finally {
+      setFullDataLoading(false)
+    }
+  }
 
   if (!selected) return null
 
@@ -491,9 +563,13 @@ function RepoDetail({ selected, onReanalyze, onDelete, onClearData }) {
         <div>
           <h3 className="detail-name">{selected.repositoryName}</h3>
           {selected.repositoryUrl && (
-            <a className="detail-url mono" href={selected.repositoryUrl} target="_blank" rel="noopener noreferrer">
-              {selected.repositoryUrl}
-            </a>
+            selected.repositoryUrl.startsWith('http') ? (
+              <a className="detail-url mono" href={selected.repositoryUrl} target="_blank" rel="noopener noreferrer">
+                {selected.repositoryUrl}
+              </a>
+            ) : (
+              <span className="detail-url mono">{selected.repositoryUrl}</span>
+            )
           )}
         </div>
         <div className="detail-badges">
@@ -509,11 +585,21 @@ function RepoDetail({ selected, onReanalyze, onDelete, onClearData }) {
         </div>
       </div>
 
+      {selected.analysisStatus === 'SUCCEEDED' && (
+        <div className="detail-view-toggle">
+          <div className="mode-toggle">
+            <button className={detailView === 'raw' ? 'active' : ''} onClick={() => setDetailView('raw')}>Raw</button>
+            <button className={detailView === 'json' ? 'active' : ''} onClick={switchToJson}>JSON</button>
+            <button className={detailView === 'full' ? 'active' : ''} onClick={switchToFull}>Full</button>
+          </div>
+        </div>
+      )}
+
       {selected.analysisStatus === 'FAILED' && selected.errorMessage && (
         <div className="error-box">{selected.errorMessage}</div>
       )}
 
-      {selected.analysisStatus === 'SUCCEEDED' && (
+      {selected.analysisStatus === 'SUCCEEDED' && detailView === 'raw' && (
         <div className="metrics-grid">
           <MetricCard metricKey="ncloc" value={selected.ncloc?.toLocaleString() ?? '-'} projectKey={selected.projectKey} />
           <MetricCard metricKey="bugs" value={selected.bugs ?? '-'} projectKey={selected.projectKey} />
@@ -525,6 +611,40 @@ function RepoDetail({ selected, onReanalyze, onDelete, onClearData }) {
           <MetricCard metricKey="reliabilityRating" value={<span className={ratingClass(selected.reliabilityRating)}>{ratingToLetter(selected.reliabilityRating)}</span>} projectKey={selected.projectKey} />
           <MetricCard metricKey="securityRating" value={<span className={ratingClass(selected.securityRating)}>{ratingToLetter(selected.securityRating)}</span>} projectKey={selected.projectKey} />
           <MetricCard metricKey="sqaleRating" value={<span className={ratingClass(selected.sqaleRating)}>{ratingToLetter(selected.sqaleRating)}</span>} projectKey={selected.projectKey} />
+        </div>
+      )}
+
+      {selected.analysisStatus === 'SUCCEEDED' && detailView === 'json' && (
+        <div className="json-view">
+          {sonarJsonLoading ? (
+            <div className="issues-loading">Loading SonarQube data...</div>
+          ) : sonarJson ? (
+            <>
+              <div className="json-toolbar">
+                <button className="btn btn-outline btn-sm" onClick={() => navigator.clipboard.writeText(JSON.stringify(sonarJson, null, 2))}>
+                  Copy
+                </button>
+              </div>
+              <pre className="json-content mono">{JSON.stringify(sonarJson, null, 2)}</pre>
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {selected.analysisStatus === 'SUCCEEDED' && detailView === 'full' && (
+        <div className="json-view">
+          {fullDataLoading ? (
+            <div className="issues-loading">Loading full SonarQube data...</div>
+          ) : fullData ? (
+            <>
+              <div className="json-toolbar">
+                <button className="btn btn-outline btn-sm" onClick={() => navigator.clipboard.writeText(JSON.stringify(fullData, null, 2))}>
+                  Copy
+                </button>
+              </div>
+              <pre className="json-content mono">{JSON.stringify(fullData, null, 2)}</pre>
+            </>
+          ) : null}
         </div>
       )}
 
@@ -619,10 +739,13 @@ function App() {
 
   const reanalyze = async (repoUrl) => {
     if (!repoUrl) return
-    const res = await fetch('/api/v1/analyze/url', {
+    const isLocal = !repoUrl.startsWith('http')
+    const endpoint = isLocal ? '/api/v1/analyze/local' : '/api/v1/analyze/url'
+    const payload = isLocal ? { path: repoUrl } : { url: repoUrl, cloneDirectory: cloneDirectory.trim() }
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: repoUrl, cloneDirectory: cloneDirectory.trim() })
+      body: JSON.stringify(payload)
     })
     if (res.ok) { fetchResults(); setView('analyze') }
   }
